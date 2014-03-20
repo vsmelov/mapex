@@ -1071,8 +1071,8 @@ class TableModelTest(unittest.TestCase):
 
             self.assertEqual(2, users.count())
 
-            self.assertCountEqual([1, 2], [d.number for d in user1.documents_not_ai])
-            self.assertCountEqual([3, 4], [d.number for d in user2.documents_not_ai])
+            self.assertCountEqual([doc1.number, doc2.number], [d.number for d in user1.documents_not_ai])
+            self.assertCountEqual([doc3.number, doc4.number], [d.number for d in user2.documents_not_ai])
 
             # Копирование списка из модели в модель вызывает исключение т.к. нарушает уникальность первичного ключа
             # Первичный ключ не автоинкрементный, а значит при переносе документов из модели в модель не сбрасывается
@@ -1084,8 +1084,18 @@ class TableModelTest(unittest.TestCase):
             user1.documents_not_ai = [doc5, doc6]
             user1.save()
             self.assertEqual(4, documents.count())
-            self.assertListEqual([doc5.series, doc6.series], [d.series for d in user1.documents_not_ai])
-            self.assertListEqual([doc3.series, doc4.series], [d.series for d in user2.documents_not_ai])
+            self.assertCountEqual([doc5.number, doc6.number], [d.number for d in user1.documents_not_ai])
+            self.assertCountEqual([doc3.number, doc4.number], [d.number for d in user2.documents_not_ai])
+
+            # Или если позаботиться о том чтобы уникальность не нарушалась
+            user1.documents_not_ai = list(user2.documents_not_ai)
+            user2.documents_not_ai = []
+            user2.save()
+            user1.save()
+            self.assertEqual(2, documents.count())
+            self.assertCountEqual([doc3.number, doc4.number], [d.number for d in user1.documents_not_ai])
+            self.assertCountEqual([], [d.number for d in user2.documents_not_ai])
+
 
     @for_all_dbms
     def test_query_with_embedded_lists(self, dbms_fw):
