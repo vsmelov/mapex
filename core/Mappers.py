@@ -716,10 +716,31 @@ class FieldTypes(object):
             """
             main_record_key = self.rel_mapper.get_property_that_is_link_for(self.mapper).get_name()
             second_record_key = self.rel_mapper.get_property_that_is_link_for(self.items_collection_mapper).get_name()
-            self.rel_mapper.delete(
-                {"%s.%s" % (main_record_key, self.mapper.primary.name()): main_record_obj.get_actual_primary_value()}
-            )
-            self.rel_mapper.insert([{main_record_key: main_record_obj, second_record_key: obj} for obj in items])
+
+            # if main_record_obj.origin is None:
+            #     old_items = []
+            #     old_items_pk = set()
+            # else:
+                #old_items = main_record_obj.origin.__dict__.get(self.mapper_field_name)
+            old_items = main_record_obj.__getattribute__(self.mapper_field_name)
+            old_items_pk = set([item.get_primary_value() for item in old_items if item.get_primary_value()])
+
+            items_pk = set([item.get_primary_value() for item in items if item.get_primary_value()])
+
+            insert_items = items_pk - old_items_pk
+            delete_items = old_items_pk - items_pk
+            print()
+            print(old_items, items)
+            print([{main_record_key: main_record_obj, second_record_key: obj} for obj in items if obj.get_primary_value() == None or obj.get_primary_value() in insert_items])
+            self.rel_mapper.insert([{main_record_key: main_record_obj, second_record_key: obj} for obj in items if obj.get_primary_value() == None or obj.get_primary_value() in insert_items])
+
+            if len(delete_items) > 0:
+                self.rel_mapper.delete(
+                    {
+                        "%s.%s" % (second_record_key, self.items_collection_mapper.primary.name()): ("in", list(delete_items)),
+                        "%s.%s" % (main_record_key, self.mapper.primary.name()): main_record_obj.get_actual_primary_value()
+                    }
+                )
 
         def clear_dependencies_from(self, main_records_ids: list):
             """

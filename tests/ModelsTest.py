@@ -554,6 +554,7 @@ class TableModelTest(unittest.TestCase):
         self.assertEqual(2, users.count())
         self.assertEqual(3, tags.count())
 
+        print("-----------------")
         # Теперь с помощью операции уровня коллекции изменим список тегов у первого пользователя:
         users.update({"tags": [tag1, tag3]}, {"uid": first_user.uid})
         self.assertEqual(2, users.count())
@@ -1765,6 +1766,7 @@ class TableModelTest(unittest.TestCase):
         self.assertEqual(count, connection.count_queries())
 
         for user in users_collection:
+            print(1, user.name, user.tags)
             tags_names = [tag.name for tag in user.tags]
             self.assertTrue(len(tags_names) > 0)
         count += dbms_fw.get_queries_amount("loading_tags")
