@@ -312,12 +312,12 @@ class Primary(ValueInside):
 
     def to_list(self):
         if self.pk_list is None:
-            if not self.model.mapper or not self.model.mapper.primary.exists():
+            try:
+                mapper = object.__getattribute__(self.model, 'mapper')
+            except AttributeError:
                 self.pk_list = []
-            elif self.model.mapper.primary.compound:
-                self.pk_list = self.model.mapper.primary.name()
             else:
-                self.pk_list = [self.model.mapper.primary.name()]
+                self.pk_list = mapper.pk_fields_list
         return self.pk_list
 
     def ensure_exists(self):
@@ -390,6 +390,7 @@ class RecordModel(ValueInside, TrackChangesValue):
         self.set_mapper(self.__class__.mapper())
         if data:
             self.load_from_array(data.get_data() if isinstance(data, RecordModel) else data, consider_as_unchanged=loaded_from_db)
+        # self.exec_lazy_loading() #####
 
     @property
     def pool(self):
@@ -580,8 +581,10 @@ class RecordModel(ValueInside, TrackChangesValue):
 
     def exec_lazy_loading(self):
         """ Если объект проиницилиазирован отложенно - вызывает инициализацию """
-        lazy, self._lazy_load = self._lazy_load, False
-        return lazy() if lazy else None
+        lazy = object.__getattribute__(self, '_lazy_load')
+        if lazy:
+            object.__setattr__(self, '_lazy_load', False)
+            lazy()
 
     def get_data(self, properties: list=None) -> dict:
         """
@@ -673,8 +676,7 @@ class RecordModel(ValueInside, TrackChangesValue):
 
     def __setattr__(self, name, val):
         """ При любом изменении полей модели необходимо инициализировать модель """
-        mapper = object.__getattribute__(self, "__dict__").get("mapper")
-        if mapper and name in mapper.get_properties():
+        if name in object.__getattribute__(self, "mapper").relation_properties_set:
             self.exec_lazy_loading()
             self.mark_as_changed()
         object.__setattr__(self, name, val)
@@ -718,15 +720,12 @@ class RecordModel(ValueInside, TrackChangesValue):
 
     def __getattribute__(self, name):
         """ При любом обращении к полям модели необходимо инициализировать модель """
-        mapper = object.__getattribute__(self, "__dict__").get("mapper")
-        # Список полей первичного ключа
-        if mapper and name in mapper.get_properties() and name not in self.primary.to_list():
-            self.exec_lazy_loading()
-
-        if name == "validate":
+        if name == "validate":  # IDEA: сделать через переопределение validate и super()
             return object.__getattribute__(self, "recursive_validate")
-
-        return object.__getattribute__(self, name)
+        else:
+            if name in object.__getattribute__(self, "mapper").relation_properties_set:
+                self.exec_lazy_loading()
+            return object.__getattribute__(self, name)
 
     def __eq__(self, other):
         """
@@ -848,7 +847,9 @@ class TableModelCache(object):
                 self._cache[mapper] = self._get_mapper_cache
 
     def _get_mapper_cache(self, m):
-        """ Собирает кэш маппера из внешней переменной cache """
+        """ Собирает кэш маппера из внешней переменной cache
+            :param m: model_type
+            """
         mapper_cache = {}
         if m.primary.compound:
             for item in m.get_new_collection(model_pool=self._pool).get_items({"or": self._ids_cache[m]}):

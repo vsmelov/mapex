@@ -1147,6 +1147,14 @@ class SqlMapper(metaclass=ABCMeta):
     support_joins = True
     binded = False
 
+    # Чтобы всегда были и можно было обращаться к ним еще до инициализации
+    # позволяет ускорить в два раза очень часто используемую функцию
+    # RecordModel.__getattribute__
+    # Без этого трика там пришлось бы делать проверку на то, инициализирован ли mapper
+    # или еще нет
+    _properties = dict()
+    relation_properties_set = set()
+
     def __new__(cls, *a, **kwa):
         with _new_lock:
             if cls._instance is None:
@@ -1183,6 +1191,19 @@ class SqlMapper(metaclass=ABCMeta):
                 self.binded = False
                 self.bind()                     # Запускаем процесс инициализации маппера
                 self.binded = True
+
+                if not self.primary.exists():
+                    self.pk_fields_list = []
+                elif self.primary.compound:
+                    self.pk_fields_list = self.primary.name()
+                else:
+                    self.pk_fields_list = [self.primary.name()]
+                # self.pk_fields_set = set(self.pk_fields_list)
+                # self.not_pk_fields_set = set(self._properties) - self.pk_fields_set
+                self.relation_properties_set = set(
+                    # множество полей маппера, являющихся линками к другим моделям
+                    prop for prop, field in self._properties.items()
+                    if isinstance(field, FieldTypes.RelationField))
 
     @staticmethod
     def factory_method(item):
